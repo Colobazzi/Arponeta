@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { createMatch, updateMatch, subscribePlayers, updatePlayer, removePlayer } from '../firebase';
-import { Copy, Share2, Trash2, Star } from 'lucide-react';
+import { createMatch, updateMatch, subscribePlayers, removePlayer } from '../firebase';
+import { Copy, Trash2 } from 'lucide-react';
+import { armarEquipo, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
 
-export default function AdminPanel({ matchId, matchData, onBack }) {
-  const [rivals, setRivals] = useState([]);
+export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack }) {
   const [mvps, setMvps] = useState([]);
   const [players, setPlayers] = useState([]);
   const [newMatchForm, setNewMatchForm] = useState({
@@ -16,11 +16,15 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
   const [creatingMatch, setCreatingMatch] = useState(false);
 
   useEffect(() => {
-    if (matchId) {
-      const unsubscribe = subscribePlayers(matchId, setPlayers);
-      return unsubscribe;
-    }
+    if (!matchId) return;
+    const unsubscribe = subscribePlayers(matchId, setPlayers);
+    return unsubscribe;
   }, [matchId]);
+
+  // Los MVP viven en Firebase, no solo en memoria: si recargás, siguen ahí.
+  useEffect(() => {
+    setMvps(matchData?.mvps || []);
+  }, [matchData]);
 
   const handleCreateMatch = async (e) => {
     e.preventDefault();
@@ -32,7 +36,7 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
     setCreatingMatch(true);
     try {
       const newId = await createMatch({
-        rival: newMatchForm.rival,
+        rival: newMatchForm.rival.trim(),
         fecha: newMatchForm.fecha,
         hora: newMatchForm.hora,
         cancha: newMatchForm.cancha,
@@ -40,17 +44,8 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
         mvps: []
       });
 
-      // Agregar rival a lista
-      setRivals([...rivals, newMatchForm.rival]);
-      setNewMatchForm({
-        rival: '',
-        fecha: new Date().toISOString().split('T')[0],
-        hora: '10:00',
-        cancha: 'Platense futbol',
-        partido: '$112.000'
-      });
-
-      alert(`Convocatoria creada! ID: ${newId}`);
+      // Avisar al App para que cambie de pantalla y escuche esta convocatoria.
+      if (onMatchCreated) onMatchCreated(newId);
     } catch (error) {
       alert('Error: ' + error.message);
     }
@@ -62,25 +57,25 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
       alert('Crea una convocatoria primero');
       return;
     }
-    if (!mvpName.trim()) return;
+    if (!mvpName || !mvpName.trim()) return;
 
-    const newMvps = [...mvps, mvpName];
-    setMvps(newMvps);
+    const nuevos = [...mvps, mvpName.trim()];
+    setMvps(nuevos);
 
     try {
-      await updateMatch(matchId, { mvps: newMvps });
+      await updateMatch(matchId, { mvps: nuevos });
     } catch (error) {
       alert('Error al agregar MVP: ' + error.message);
-      setMvps(mvps.filter(m => m !== mvpName));
+      setMvps(mvps);
     }
   };
 
   const handleRemoveMVP = async (mvpName) => {
-    const newMvps = mvps.filter(m => m !== mvpName);
-    setMvps(newMvps);
+    const nuevos = mvps.filter((m) => m !== mvpName);
+    setMvps(nuevos);
 
     try {
-      await updateMatch(matchId, { mvps: newMvps });
+      await updateMatch(matchId, { mvps: nuevos });
     } catch (error) {
       alert('Error: ' + error.message);
       setMvps(mvps);
@@ -88,6 +83,7 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
   };
 
   const handlePlayerNoShow = async (playerId) => {
+    if (!window.confirm('¿Sacar a este jugador de la lista?')) return;
     try {
       await removePlayer(matchId, playerId);
     } catch (error) {
@@ -95,30 +91,9 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
     }
   };
 
-  const getPlayersByPosition = () => {
-    const positions = ['Arquero', 'Defensa', 'Medio-Delantero'];
-    const grouped = {};
+  const { convocados, recambios, totalConvocados, esMvp } = armarEquipo(players, mvps);
 
-    positions.forEach(pos => {
-      grouped[pos] = players.filter(p => p.position === pos).slice(0, getMaxByPosition(pos));
-    });
-
-    return grouped;
-  };
-
-  const getMaxByPosition = (position) => {
-    if (position === 'Arquero') return 1;
-    if (position === 'Defensa') return 3;
-    if (position === 'Medio-Delantero') return 4;
-    return 0;
-  };
-
-  const convocados = getPlayersByPosition();
-  const totalConvocados = Object.values(convocados).reduce((sum, arr) => sum + arr.length, 0);
-  const recambios = players.slice(totalConvocados);
-
-  const shareUrl = `${window.location.origin}?match=${matchId}`;
-  const adminUrl = `${window.location.origin}?match=${matchId}&admin=true`;
+  const shareUrl = matchId ? `${window.location.origin}?match=${matchId}` : '';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -158,6 +133,13 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              <input
+                type="text"
+                placeholder="Cancha"
+                value={newMatchForm.cancha}
+                onChange={(e) => setNewMatchForm({ ...newMatchForm, cancha: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
               <button
                 type="submit"
                 disabled={creatingMatch}
@@ -179,13 +161,20 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
               <p className="text-gray-600 text-sm">Precio: {matchData.partido}</p>
             </div>
           )}
+
+          {matchId && !matchData && (
+            <p className="text-gray-500 italic">Cargando convocatoria...</p>
+          )}
         </div>
 
         {matchId && (
           <>
             {/* MVPs */}
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">⭐ MVPs (2 lugares garantizados)</h2>
+              <h2 className="text-2xl font-bold text-gray-800 mb-1">⭐ MVPs</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Tienen lugar garantizado: entran primeros en su posición.
+              </p>
               <div className="space-y-3">
                 {mvps.map((mvp, idx) => (
                   <div
@@ -207,8 +196,9 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
                     id="mvp-input"
                     type="text"
                     placeholder="Nombre del MVP"
-                    onKeyPress={(e) => {
+                    onKeyDown={(e) => {
                       if (e.key === 'Enter') {
+                        e.preventDefault();
                         handleAddMVP(e.target.value);
                         e.target.value = '';
                       }
@@ -250,7 +240,11 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
                   </button>
                 </div>
                 <button
-                  onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`Anotar aquí: ${shareUrl}`)}`)}
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/?text=${encodeURIComponent(`Anotate acá: ${shareUrl}`)}`
+                    )
+                  }
                   className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition font-semibold"
                 >
                   Compartir por WhatsApp
@@ -261,28 +255,43 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
             {/* Convocados */}
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                📋 Convocados ({totalConvocados}/8)
+                📋 Convocados ({totalConvocados}/{TOTAL_TITULARES})
               </h2>
               <div className="space-y-4">
-                {['Arquero', 'Defensa', 'Medio-Delantero'].map(position => (
+                {POSICIONES.map((position) => (
                   <div key={position}>
-                    <h3 className="font-bold text-gray-700 mb-2">{position}s ({getMaxByPosition(position)})</h3>
+                    <h3 className="font-bold text-gray-700 mb-2">
+                      {position}s ({convocados[position]?.length || 0}/{FORMACION[position]})
+                    </h3>
                     <div className="space-y-1 mb-3">
-                      {convocados[position]?.map(player => (
-                        <div
-                          key={player.id}
-                          className="flex justify-between items-center bg-green-50 p-3 rounded-lg border-l-4 border-green-500"
-                        >
-                          <div className="font-semibold text-gray-800">{player.name}</div>
-                          <button
-                            onClick={() => handlePlayerNoShow(player.id)}
-                            className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
-                            title="Marcar como no juega"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                      {convocados[position]?.length === 0 ? (
+                        <div className="text-gray-400 italic text-sm px-3 py-2">
+                          Sin anotaciones
                         </div>
-                      ))}
+                      ) : (
+                        convocados[position].map((player) => (
+                          <div
+                            key={player.id}
+                            className={`flex justify-between items-center p-3 rounded-lg border-l-4 ${
+                              esMvp(player)
+                                ? 'bg-yellow-50 border-yellow-500'
+                                : 'bg-green-50 border-green-500'
+                            }`}
+                          >
+                            <div className="font-semibold text-gray-800">
+                              {esMvp(player) && '⭐ '}
+                              {player.name}
+                            </div>
+                            <button
+                              onClick={() => handlePlayerNoShow(player.id)}
+                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
+                              title="Marcar como no juega"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 ))}
@@ -291,7 +300,9 @@ export default function AdminPanel({ matchId, matchData, onBack }) {
 
             {/* Recambio */}
             <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">🔄 Recambio</h2>
+              <h2 className="text-2xl font-bold text-gray-800 mb-4">
+                🔄 Recambio ({recambios.length})
+              </h2>
               <div className="space-y-2">
                 {recambios.length === 0 ? (
                   <p className="text-gray-500 italic">Sin recambio aún</p>

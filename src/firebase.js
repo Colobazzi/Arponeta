@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, push, set, update, remove, onValue, query, orderByChild, equalTo } from 'firebase/database';
+import { getDatabase, ref, push, set, update, remove, onValue, query, orderByChild } from 'firebase/database';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 const firebaseConfig = {

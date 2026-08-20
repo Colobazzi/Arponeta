@@ -6,6 +6,7 @@ export default function PlayerForm({ matchId, matchData }) {
   const [position, setPosition] = useState('Defensa');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [lastName, setLastName] = useState('');
   const [players, setPlayers] = useState([]);
   const [error, setError] = useState('');
 
@@ -43,6 +44,7 @@ export default function PlayerForm({ matchId, matchData }) {
         position: position
       });
 
+      setLastName(name.trim());
       setSubmitted(true);
       setName('');
       setPosition('Defensa');
@@ -65,7 +67,7 @@ export default function PlayerForm({ matchId, matchData }) {
         {submitted && (
           <div className="bg-green-100 border-l-4 border-green-500 p-4 rounded mb-4">
             <p className="text-green-800 font-semibold">
-              ¡Bienvenido {name}! Chequea la lista de arriba para ver dónde entraste
+              ¡Bienvenido {lastName}! Chequea la lista de arriba para ver dónde entraste
             </p>
           </div>
         )}

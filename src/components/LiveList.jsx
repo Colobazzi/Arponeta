@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { subscribePlayers } from '../firebase';
 import { Star } from 'lucide-react';
+import { armarEquipo, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
 
 export default function LiveList({ matchId, matchData }) {
   const [players, setPlayers] = useState([]);
@@ -11,34 +12,14 @@ export default function LiveList({ matchId, matchData }) {
     return unsubscribe;
   }, [matchId]);
 
-  const getPlayersByPosition = () => {
-    const positions = ['Arquero', 'Defensa', 'Medio-Delantero'];
-    const grouped = {};
-
-    positions.forEach(pos => {
-      grouped[pos] = players.filter(p => p.position === pos).slice(0, getMaxByPosition(pos));
-    });
-
-    return grouped;
-  };
-
-  const getMaxByPosition = (position) => {
-    if (position === 'Arquero') return 1;
-    if (position === 'Defensa') return 3;
-    if (position === 'Medio-Delantero') return 4;
-    return 0;
-  };
-
-  const isMVP = (playerName) => {
-    return matchData?.mvps?.includes(playerName);
-  };
-
-  const convocados = getPlayersByPosition();
-  const totalConvocados = Object.values(convocados).reduce((sum, arr) => sum + arr.length, 0);
-  const recambios = players.slice(totalConvocados);
+  const { convocados, recambios, totalConvocados, esMvp } = armarEquipo(
+    players,
+    matchData?.mvps
+  );
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-6 mb-6 mx-4 mt-4 max-w-2xl">
+    // pb-96 deja aire abajo para que el formulario fijo no tape la lista
+    <div className="bg-white rounded-xl shadow-lg p-6 mb-6 mx-4 mt-4 max-w-2xl md:mx-auto pb-8">
       <div className="text-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800">
           🐋 Arponeta vs {matchData?.rival || 'Rival'}
@@ -52,14 +33,14 @@ export default function LiveList({ matchId, matchData }) {
         {/* Convocados */}
         <div className="bg-blue-50 rounded-lg p-4">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">
-            ✅ Convocados ({totalConvocados}/8)
+            ✅ Convocados ({totalConvocados}/{TOTAL_TITULARES})
           </h2>
 
           <div className="space-y-3">
-            {['Arquero', 'Defensa', 'Medio-Delantero'].map(position => (
+            {POSICIONES.map((position) => (
               <div key={position}>
                 <h3 className="text-sm font-semibold text-gray-600 mb-2 uppercase">
-                  {position}s - {convocados[position]?.length || 0}/{getMaxByPosition(position)}
+                  {position}s - {convocados[position]?.length || 0}/{FORMACION[position]}
                 </h3>
                 <div className="space-y-1">
                   {convocados[position]?.length === 0 ? (
@@ -69,18 +50,17 @@ export default function LiveList({ matchId, matchData }) {
                       <div
                         key={player.id}
                         className={`flex items-center px-4 py-2 rounded-lg font-semibold text-gray-800 ${
-                          isMVP(player.name)
+                          esMvp(player)
                             ? 'bg-yellow-100 border-l-4 border-yellow-500'
                             : 'bg-green-100 border-l-4 border-green-500'
                         }`}
                       >
                         <span className="mr-3 text-gray-600">#{idx + 1}</span>
                         <span>{player.name}</span>
-                        {isMVP(player.name) && (
+                        {esMvp(player) && (
                           <Star
                             size={18}
                             className="ml-auto text-yellow-600 fill-yellow-600"
-                            title="MVP de la fecha anterior"
                           />
                         )}
                       </div>
@@ -116,15 +96,15 @@ export default function LiveList({ matchId, matchData }) {
         </div>
 
         {/* Spots disponibles */}
-        {totalConvocados < 8 && (
+        {totalConvocados < TOTAL_TITULARES && (
           <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-lg">
             <p className="text-amber-800 font-semibold">
-              ⚠️ Aún hay {8 - totalConvocados} lugar(es) disponible(s)
+              ⚠️ Aún hay {TOTAL_TITULARES - totalConvocados} lugar(es) disponible(s)
             </p>
           </div>
         )}
 
-        {totalConvocados === 8 && (
+        {totalConvocados === TOTAL_TITULARES && (
           <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-lg">
             <p className="text-green-800 font-semibold">
               ✅ Equipo completo! Recambios ordenados por hora de anotación
@@ -137,6 +117,9 @@ export default function LiveList({ matchId, matchData }) {
       <div className="mt-6 text-center text-xs text-gray-500 animate-pulse">
         🟢 En vivo - actualizándose automáticamente
       </div>
+
+      {/* Espacio para que el formulario fijo de abajo no tape el final */}
+      <div className="h-80" />
     </div>
   );
 }

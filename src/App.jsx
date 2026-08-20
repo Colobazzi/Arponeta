@@ -9,7 +9,6 @@ export default function App() {
   const [currentView, setCurrentView] = useState('home');
   const [matchId, setMatchId] = useState(null);
   const [matchData, setMatchData] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
 
   // Chequea si viene de URL con matchId
   useEffect(() => {
@@ -19,13 +18,7 @@ export default function App() {
 
     if (urlMatchId) {
       setMatchId(urlMatchId);
-      setIsAdmin(adminMode);
-
-      if (adminMode) {
-        setCurrentView('admin');
-      } else {
-        setCurrentView('join');
-      }
+      setCurrentView(adminMode ? 'admin' : 'join');
     }
   }, []);
 
@@ -40,31 +33,33 @@ export default function App() {
     return unsubscribe;
   }, [matchId]);
 
+  // Se llama DESDE el panel, cuando la convocatoria ya se guardó en Firebase.
   const handleMatchCreated = (newMatchId) => {
+    if (!newMatchId) return;
     setMatchId(newMatchId);
-    setIsAdmin(true);
-    setCurrentView('admin');
+    // Deja el id en la URL: si recargás la página, no perdés el panel.
+    window.history.replaceState({}, '', `?match=${newMatchId}&admin=true`);
   };
 
-  const handleViewMatch = (id) => {
-    setMatchId(id);
-    setCurrentView('join');
+  const handleBackToHome = () => {
+    setMatchId(null);
+    setMatchData(null);
+    setCurrentView('home');
+    window.history.replaceState({}, '', window.location.pathname);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       {currentView === 'home' && (
-        <Home
-          onCreateMatch={handleMatchCreated}
-          onViewMatch={handleViewMatch}
-        />
+        <Home onGoToAdmin={() => setCurrentView('admin')} />
       )}
 
-      {currentView === 'admin' && matchId && (
+      {currentView === 'admin' && (
         <AdminPanel
           matchId={matchId}
           matchData={matchData}
-          onBack={() => setCurrentView('home')}
+          onMatchCreated={handleMatchCreated}
+          onBack={handleBackToHome}
         />
       )}
 
@@ -78,7 +73,7 @@ export default function App() {
   );
 }
 
-function Home({ onCreateMatch, onViewMatch }) {
+function Home({ onGoToAdmin }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
@@ -87,7 +82,7 @@ function Home({ onCreateMatch, onViewMatch }) {
         <p className="text-gray-600 mb-8">Sistema de anotación para el equipo</p>
 
         <button
-          onClick={() => onCreateMatch()}
+          onClick={onGoToAdmin}
           className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 transition mb-3"
         >
           📋 Crear Nueva Convocatoria
