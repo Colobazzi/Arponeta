@@ -1,21 +1,33 @@
-import React, { useState } from 'react';
-import { registerPlayer, subscribePlayers } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { registerPlayer, subscribePlayers, esperarUid } from '../firebase';
 
-export default function PlayerForm({ matchId, matchData }) {
+export default function PlayerForm({ matchId }) {
   const [name, setName] = useState('');
   const [position, setPosition] = useState('Defensa');
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [lastName, setLastName] = useState('');
   const [players, setPlayers] = useState([]);
   const [error, setError] = useState('');
+  const [uid, setUid] = useState(null);
 
-  React.useEffect(() => {
-    if (matchId) {
-      const unsubscribe = subscribePlayers(matchId, setPlayers);
-      return unsubscribe;
-    }
+  // uid de ESTE dispositivo (login anónimo de Firebase)
+  useEffect(() => {
+    let vivo = true;
+    esperarUid().then((valor) => {
+      if (vivo) setUid(valor);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!matchId) return;
+    const unsubscribe = subscribePlayers(matchId, setPlayers);
+    return unsubscribe;
   }, [matchId]);
+
+  // ¿Este dispositivo ya anotó a alguien?
+  const miAnotacion = uid ? players.find((p) => p.uid === uid || p.id === uid) : null;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,9 +43,8 @@ export default function PlayerForm({ matchId, matchData }) {
       return;
     }
 
-    // Validar que no se repita
-    if (players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-      setError('¡Ya estás anotado!');
+    if (players.some((p) => (p.name || '').toLowerCase() === name.trim().toLowerCase())) {
+      setError('Ya hay alguien anotado con ese nombre');
       return;
     }
 
@@ -43,34 +54,63 @@ export default function PlayerForm({ matchId, matchData }) {
         name: name.trim(),
         position: position
       });
-
-      setLastName(name.trim());
-      setSubmitted(true);
       setName('');
-      setPosition('Defensa');
-
-      // Reset mensaje después de 3 segundos
-      setTimeout(() => setSubmitted(false), 3000);
     } catch (err) {
-      setError('Error al anotarse: ' + err.message);
+      // Si las reglas de Firebase rechazan la escritura, casi siempre es
+      // porque este dispositivo ya tiene una anotación.
+      const esPermiso = (err?.code || '').includes('permission');
+      setError(
+        esPermiso
+          ? 'Este dispositivo ya anotó a alguien. Solo se permite una anotación por celular.'
+          : 'Error al anotarse: ' + err.message
+      );
     }
     setSubmitting(false);
   };
 
+  // ── Ya anotado: no mostramos el formulario ──
+  if (miAnotacion) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-green-600 shadow-2xl">
+        <div className="max-w-2xl mx-auto p-6">
+          <h2 className="text-2xl font-bold text-gray-800 mb-3">✅ Ya estás anotado</h2>
+
+          <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded mb-3">
+            <p className="text-green-900 font-semibold text-lg">
+              {miAnotacion.name}
+            </p>
+            <p className="text-green-800 text-sm">{miAnotacion.position}</p>
+          </div>
+
+          <p className="text-sm text-gray-600">
+            Mirá la lista de arriba para ver si quedaste de titular o de recambio.
+          </p>
+          <p className="text-xs text-gray-500 mt-2">
+            Si al final no podés ir, avisale al que arma la lista para que te saque.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Todavía cargando el uid ──
+  if (!uid) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-blue-600 shadow-2xl">
+        <div className="max-w-2xl mx-auto p-6">
+          <p className="text-gray-500 italic">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-blue-600 shadow-2xl">
       <div className="max-w-2xl mx-auto p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">
-          {submitted ? '✅ ¡Anotado!' : '📝 Anotarse'}
-        </h2>
-
-        {submitted && (
-          <div className="bg-green-100 border-l-4 border-green-500 p-4 rounded mb-4">
-            <p className="text-green-800 font-semibold">
-              ¡Bienvenido {lastName}! Chequea la lista de arriba para ver dónde entraste
-            </p>
-          </div>
-        )}
+        <h2 className="text-2xl font-bold text-gray-800 mb-1">📝 Anotarse</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          Una anotación por celular: anotate solo a vos mismo.
+        </p>
 
         {error && (
           <div className="bg-red-100 border-l-4 border-red-500 p-4 rounded mb-4">

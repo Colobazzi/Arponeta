@@ -16,15 +16,28 @@ const app = initializeApp(firebaseConfig);
 export const database = getDatabase(app);
 export const auth = getAuth(app);
 
-// Auto login anónimo
+// Login anónimo automático.
+// Firebase le da a cada navegador un uid propio y persistente. Ese uid es el
+// que usamos para que cada dispositivo pueda anotar a UNA sola persona.
+let avisarUidListo;
+const uidListo = new Promise((resolve) => {
+  avisarUidListo = resolve;
+});
+
 onAuthStateChanged(auth, (user) => {
-  if (!user) {
-    signInAnonymously(auth).catch(err => console.error('Auth error:', err));
+  if (user) {
+    avisarUidListo(user.uid);
+  } else {
+    signInAnonymously(auth).catch((err) => console.error('Auth error:', err));
   }
 });
 
+/** Devuelve el uid de este dispositivo (espera a que el login anónimo termine). */
+export const esperarUid = () => uidListo;
+
 export const createMatch = async (matchData) => {
   try {
+    await esperarUid(); // las reglas exigen estar logueado (anónimo)
     const matchesRef = ref(database, 'matches');
     const newMatchRef = push(matchesRef);
     const matchId = newMatchRef.key;
@@ -46,16 +59,22 @@ export const createMatch = async (matchData) => {
 
 export const registerPlayer = async (matchId, playerData) => {
   try {
-    const playersRef = ref(database, `matches/${matchId}/players`);
-    const newPlayerRef = push(playersRef);
+    const uid = await esperarUid();
 
-    await set(newPlayerRef, {
-      ...playerData,
+    // La anotación se guarda EN el uid del dispositivo, no en una clave al azar.
+    // Así un mismo celular no puede ocupar dos lugares: siempre es el mismo nodo.
+    // Las reglas de Firebase además impiden pisarlo una vez creado.
+    const playerRef = ref(database, `matches/${matchId}/players/${uid}`);
+
+    await set(playerRef, {
+      name: playerData.name,
+      position: playerData.position,
       timestamp: Date.now(),
-      id: newPlayerRef.key
+      id: uid,
+      uid: uid
     });
 
-    return newPlayerRef.key;
+    return uid;
   } catch (error) {
     console.error('Error registering player:', error);
     throw error;
@@ -93,6 +112,7 @@ export const updatePlayer = async (matchId, playerId, updates) => {
 
 export const updateMatch = async (matchId, updates) => {
   try {
+    await esperarUid();
     const matchRef = ref(database, `matches/${matchId}`);
     await update(matchRef, {
       ...updates,
@@ -106,6 +126,7 @@ export const updateMatch = async (matchId, updates) => {
 
 export const removePlayer = async (matchId, playerId) => {
   try {
+    await esperarUid();
     const playerRef = ref(database, `matches/${matchId}/players/${playerId}`);
     await remove(playerRef);
   } catch (error) {
