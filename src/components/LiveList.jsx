@@ -57,6 +57,11 @@ export default function LiveList({ matchId, matchData }) {
                       >
                         <span className="mr-3 text-gray-600">#{idx + 1}</span>
                         <span>{player.name}</span>
+                        {player.reservaMvp && (
+                          <span className="text-xs font-normal text-gray-500 ml-2">
+                            MVP
+                          </span>
+                        )}
                         {esMvp(player) && (
                           <Star
                             size={18}

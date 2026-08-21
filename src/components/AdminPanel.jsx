@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { createMatch, updateMatch, subscribePlayers, removePlayer } from '../firebase';
 import { Copy, Trash2 } from 'lucide-react';
-import { armarEquipo, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
+import { armarEquipo, normalizarMvps, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
+
+// Dominio PÚBLICO de la app (el de producción).
+// Vercel también genera dominios de preview tipo "...-git-main-colito.vercel.app",
+// pero esos están protegidos con login de Vercel: si compartís uno de esos,
+// a los jugadores les pide registrarse. Por eso el link para compartir siempre
+// se arma con este dominio fijo, no con el que tengas abierto en el navegador.
+// Si algún día le cambiás el nombre al proyecto en Vercel, actualizá esta línea.
+const SITIO_PUBLICO = 'https://arponetasistanotacionn.vercel.app';
 
 export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack }) {
   const [mvps, setMvps] = useState([]);
@@ -14,6 +22,8 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
     partido: '$112.000'
   });
   const [creatingMatch, setCreatingMatch] = useState(false);
+  const [mvpName, setMvpName] = useState('');
+  const [mvpPosition, setMvpPosition] = useState('Defensa');
 
   useEffect(() => {
     if (!matchId) return;
@@ -23,7 +33,7 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
 
   // Los MVP viven en Firebase, no solo en memoria: si recargás, siguen ahí.
   useEffect(() => {
-    setMvps(matchData?.mvps || []);
+    setMvps(normalizarMvps(matchData?.mvps));
   }, [matchData]);
 
   const handleCreateMatch = async (e) => {
@@ -52,15 +62,26 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
     setCreatingMatch(false);
   };
 
-  const handleAddMVP = async (mvpName) => {
+  const handleAddMVP = async () => {
     if (!matchId) {
       alert('Crea una convocatoria primero');
       return;
     }
-    if (!mvpName || !mvpName.trim()) return;
 
-    const nuevos = [...mvps, mvpName.trim()];
+    const nombre = mvpName.trim();
+    if (!nombre) return;
+
+    const yaEsta = mvps.some(
+      (m) => m.name.trim().toLowerCase() === nombre.toLowerCase()
+    );
+    if (yaEsta) {
+      alert('Ese MVP ya está cargado');
+      return;
+    }
+
+    const nuevos = [...mvps, { name: nombre, position: mvpPosition }];
     setMvps(nuevos);
+    setMvpName('');
 
     try {
       await updateMatch(matchId, { mvps: nuevos });
@@ -70,8 +91,8 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
     }
   };
 
-  const handleRemoveMVP = async (mvpName) => {
-    const nuevos = mvps.filter((m) => m !== mvpName);
+  const handleRemoveMVP = async (nombre) => {
+    const nuevos = mvps.filter((m) => m.name !== nombre);
     setMvps(nuevos);
 
     try {
@@ -91,9 +112,10 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
     }
   };
 
-  const { convocados, recambios, totalConvocados, esMvp } = armarEquipo(players, mvps);
+  const { convocados, recambios, totalConvocados, esMvp, mvpsSinPosicion } =
+    armarEquipo(players, mvps);
 
-  const shareUrl = matchId ? `${window.location.origin}?match=${matchId}` : '';
+  const shareUrl = matchId ? `${SITIO_PUBLICO}?match=${matchId}` : '';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -173,17 +195,33 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
             <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
               <h2 className="text-2xl font-bold text-gray-800 mb-1">⭐ MVPs</h2>
               <p className="text-sm text-gray-500 mb-4">
-                Tienen lugar garantizado: entran primeros en su posición.
+                Lugar garantizado: ocupan su puesto en el equipo desde ahora, sin
+                necesidad de anotarse.
               </p>
               <div className="space-y-3">
+                {mvps.length === 0 && (
+                  <p className="text-gray-400 italic text-sm">Sin MVPs cargados</p>
+                )}
+
                 {mvps.map((mvp, idx) => (
                   <div
                     key={idx}
                     className="flex justify-between items-center bg-yellow-50 p-3 rounded-lg border-l-4 border-yellow-400"
                   >
-                    <span className="font-semibold text-gray-800">{mvp}</span>
+                    <div>
+                      <span className="font-semibold text-gray-800">{mvp.name}</span>
+                      {mvp.position ? (
+                        <span className="text-sm text-gray-600 ml-2">
+                          ({mvp.position})
+                        </span>
+                      ) : (
+                        <span className="text-sm text-red-600 ml-2">
+                          ⚠️ sin posición — no ocupa lugar
+                        </span>
+                      )}
+                    </div>
                     <button
-                      onClick={() => handleRemoveMVP(mvp)}
+                      onClick={() => handleRemoveMVP(mvp.name)}
                       className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
                     >
                       <Trash2 size={18} />
@@ -191,26 +229,41 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
                   </div>
                 ))}
 
-                <div className="flex gap-2 mt-4">
+                {mvpsSinPosicion.length > 0 && (
+                  <div className="bg-red-50 border-l-4 border-red-400 p-3 rounded-lg text-sm text-red-800">
+                    Hay {mvpsSinPosicion.length} MVP(s) cargado(s) antes de que
+                    existiera el campo de posición. Borralos y volvé a agregarlos
+                    eligiendo la posición, así ocupan su lugar en la lista.
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2 mt-4">
                   <input
-                    id="mvp-input"
                     type="text"
                     placeholder="Nombre del MVP"
+                    value={mvpName}
+                    onChange={(e) => setMvpName(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddMVP(e.target.value);
-                        e.target.value = '';
+                        handleAddMVP();
                       }
                     }}
                     className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
                   />
+                  <select
+                    value={mvpPosition}
+                    onChange={(e) => setMvpPosition(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  >
+                    {POSICIONES.map((pos) => (
+                      <option key={pos} value={pos}>
+                        {pos}
+                      </option>
+                    ))}
+                  </select>
                   <button
-                    onClick={() => {
-                      const input = document.getElementById('mvp-input');
-                      handleAddMVP(input.value);
-                      input.value = '';
-                    }}
+                    onClick={handleAddMVP}
                     className="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition font-semibold"
                   >
                     Agregar
@@ -281,14 +334,29 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
                             <div className="font-semibold text-gray-800">
                               {esMvp(player) && '⭐ '}
                               {player.name}
+                              {player.reservaMvp && (
+                                <span className="text-xs font-normal text-gray-500 ml-2">
+                                  lugar guardado (MVP)
+                                </span>
+                              )}
                             </div>
-                            <button
-                              onClick={() => handlePlayerNoShow(player.id)}
-                              className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
-                              title="Marcar como no juega"
-                            >
-                              <Trash2 size={18} />
-                            </button>
+                            {player.reservaMvp ? (
+                              <button
+                                onClick={() => handleRemoveMVP(player.name)}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
+                                title="Sacar el lugar guardado"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handlePlayerNoShow(player.id)}
+                                className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
+                                title="Marcar como no juega"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            )}
                           </div>
                         ))
                       )}
@@ -318,7 +386,11 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
                         <span className="text-xs text-gray-500 ml-2">({player.position})</span>
                       </div>
                       <button
-                        onClick={() => handlePlayerNoShow(player.id)}
+                        onClick={() =>
+                          player.reservaMvp
+                            ? handleRemoveMVP(player.name)
+                            : handlePlayerNoShow(player.id)
+                        }
                         className="p-2 text-red-600 hover:bg-red-100 rounded-lg transition"
                       >
                         <Trash2 size={18} />
