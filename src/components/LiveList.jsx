@@ -3,7 +3,7 @@ import { subscribePlayers } from '../firebase';
 import { Star } from 'lucide-react';
 import { armarEquipo, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
 
-export default function LiveList({ matchId, matchData }) {
+export default function LiveList({ matchId, matchData, vistaDT }) {
   const [players, setPlayers] = useState([]);
 
   useEffect(() => {
@@ -123,8 +123,9 @@ export default function LiveList({ matchId, matchData }) {
         🟢 En vivo - actualizándose automáticamente
       </div>
 
-      {/* Espacio para que el formulario fijo de abajo no tape el final */}
-      <div className="h-80" />
+      {/* Espacio para que el bloque fijo de abajo no tape el final.
+          En vista de DT el bloque está plegado, así que necesita mucho menos. */}
+      <div className={vistaDT ? 'h-24' : 'h-80'} />
     </div>
   );
 }

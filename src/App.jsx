@@ -10,6 +10,28 @@ export default function App() {
   const [matchId, setMatchId] = useState(null);
   const [matchData, setMatchData] = useState(null);
 
+  // Vista de DT: pliega el bloque de anotarse para ver la lista cómoda.
+  // Se recuerda en el navegador, así recargar no lo vuelve a abrir solo.
+  const [vistaDT, setVistaDT] = useState(() => {
+    try {
+      return localStorage.getItem('arponeta_vista_dt') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleVistaDT = () => {
+    setVistaDT((actual) => {
+      const nuevo = !actual;
+      try {
+        localStorage.setItem('arponeta_vista_dt', nuevo ? '1' : '0');
+      } catch {
+        // Modo incógnito o storage bloqueado: no pasa nada, sigue funcionando.
+      }
+      return nuevo;
+    });
+  };
+
   // Chequea si viene de URL con matchId
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -65,8 +87,12 @@ export default function App() {
 
       {currentView === 'join' && matchId && (
         <>
-          <LiveList matchId={matchId} matchData={matchData} />
-          <PlayerForm matchId={matchId} matchData={matchData} />
+          <LiveList matchId={matchId} matchData={matchData} vistaDT={vistaDT} />
+          <PlayerForm
+            matchId={matchId}
+            vistaDT={vistaDT}
+            onToggleVista={toggleVistaDT}
+          />
         </>
       )}
     </div>

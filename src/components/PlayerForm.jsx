@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { registerPlayer, subscribePlayers, esperarUid } from '../firebase';
 
-export default function PlayerForm({ matchId }) {
+export default function PlayerForm({ matchId, vistaDT, onToggleVista }) {
   const [name, setName] = useState('');
   const [position, setPosition] = useState('Defensa');
   const [submitting, setSubmitting] = useState(false);
@@ -68,12 +68,53 @@ export default function PlayerForm({ matchId }) {
     setSubmitting(false);
   };
 
+  // Botón que alterna entre ver la lista sola y ver el bloque de anotarse.
+  const BotonVistaDT = () => (
+    <button
+      type="button"
+      onClick={onToggleVista}
+      className="shrink-0 text-sm bg-gray-100 text-gray-700 px-3 py-2 rounded-lg font-semibold hover:bg-gray-200 transition border border-gray-300"
+    >
+      👀 Vista de DT
+    </button>
+  );
+
+  // ── VISTA DE DT: bloque plegado, solo una barrita con el botón ──
+  // Va primero que todo para que se pueda plegar incluso mientras carga.
+  if (vistaDT) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-gray-400 shadow-2xl">
+        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <span className="text-sm text-gray-600 truncate">
+            {miAnotacion ? (
+              <>
+                ✅ Anotado: <strong className="text-gray-800">{miAnotacion.name}</strong>
+              </>
+            ) : (
+              'Estás mirando la lista'
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={onToggleVista}
+            className="shrink-0 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
+          >
+            {miAnotacion ? '👤 Vista jugador' : '✏️ Anotarme'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Ya anotado: no mostramos el formulario ──
   if (miAnotacion) {
     return (
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-green-600 shadow-2xl">
         <div className="max-w-2xl mx-auto p-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-3">✅ Ya estás anotado</h2>
+          <div className="flex justify-between items-center gap-3 mb-3">
+            <h2 className="text-xl font-bold text-gray-800">✅ Estás anotado</h2>
+            <BotonVistaDT />
+          </div>
 
           <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded mb-3">
             <p className="text-green-900 font-semibold text-lg">
@@ -97,8 +138,9 @@ export default function PlayerForm({ matchId }) {
   if (!uid) {
     return (
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-blue-600 shadow-2xl">
-        <div className="max-w-2xl mx-auto p-6">
+        <div className="max-w-2xl mx-auto p-6 flex justify-between items-center gap-3">
           <p className="text-gray-500 italic">Cargando...</p>
+          <BotonVistaDT />
         </div>
       </div>
     );
@@ -107,7 +149,10 @@ export default function PlayerForm({ matchId }) {
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t-4 border-blue-600 shadow-2xl">
       <div className="max-w-2xl mx-auto p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-1">📝 Anotarse</h2>
+        <div className="flex justify-between items-start gap-3 mb-1">
+          <h2 className="text-2xl font-bold text-gray-800">📝 Anotarse</h2>
+          <BotonVistaDT />
+        </div>
         <p className="text-xs text-gray-500 mb-4">
           Una anotación por celular: anotate solo a vos mismo.
         </p>
