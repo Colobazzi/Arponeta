@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createMatch, updateMatch, subscribePlayers, removePlayer } from '../firebase';
 import { Copy, Trash2 } from 'lucide-react';
-import { armarEquipo, normalizarMvps, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
+import { armarEquipo, normalizarMvps, textoParaWhatsApp, POSICIONES, FORMACION, TOTAL_TITULARES } from '../roster';
 
 // Dominio PÚBLICO de la app (el de producción).
 // Vercel también genera dominios de preview tipo "...-git-main-colito.vercel.app",
@@ -10,6 +10,28 @@ import { armarEquipo, normalizarMvps, POSICIONES, FORMACION, TOTAL_TITULARES } f
 // se arma con este dominio fijo, no con el que tengas abierto en el navegador.
 // Si algún día le cambiás el nombre al proyecto en Vercel, actualizá esta línea.
 const SITIO_PUBLICO = 'https://arponetasistanotacionn.vercel.app';
+
+/** Copia al portapapeles. Tiene plan B para navegadores viejos de celular. */
+async function copiarAlPortapapeles(texto) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  } catch {
+    try {
+      const area = document.createElement('textarea');
+      area.value = texto;
+      area.style.position = 'fixed';
+      area.style.top = '-1000px';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(area);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
 
 export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack }) {
   const [mvps, setMvps] = useState([]);
@@ -24,6 +46,8 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
   const [creatingMatch, setCreatingMatch] = useState(false);
   const [mvpName, setMvpName] = useState('');
   const [mvpPosition, setMvpPosition] = useState('Defensa');
+  const [textoEditado, setTextoEditado] = useState(null);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     if (!matchId) return;
@@ -116,6 +140,25 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
     armarEquipo(players, mvps);
 
   const shareUrl = matchId ? `${SITIO_PUBLICO}?match=${matchId}` : '';
+
+  // Lista en texto plano, lista para pegar en WhatsApp.
+  const textoGenerado = textoParaWhatsApp({
+    matchData,
+    players,
+    mvps,
+    link: shareUrl
+  });
+  const textoFinal = textoEditado !== null ? textoEditado : textoGenerado;
+
+  const handleCopiarLista = async () => {
+    const ok = await copiarAlPortapapeles(textoFinal);
+    if (ok) {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } else {
+      alert('No se pudo copiar solo. Seleccioná el texto del recuadro y copialo a mano.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -301,6 +344,58 @@ export default function AdminPanel({ matchId, matchData, onMatchCreated, onBack 
                   className="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition font-semibold"
                 >
                   Compartir por WhatsApp
+                </button>
+              </div>
+            </div>
+
+            {/* Lista en texto para mandar al grupo */}
+            <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+              <div className="flex justify-between items-start gap-3 mb-1">
+                <h2 className="text-2xl font-bold text-gray-800">📄 Lista para el grupo</h2>
+                {textoEditado !== null && (
+                  <button
+                    onClick={() => setTextoEditado(null)}
+                    className="shrink-0 text-sm bg-gray-100 text-gray-700 px-3 py-2 rounded-lg font-semibold hover:bg-gray-200 transition border border-gray-300"
+                  >
+                    ↻ Regenerar
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                La lista completa en texto, para que no tengan que entrar al link.
+                Se actualiza sola. Podés editarla antes de mandarla.
+              </p>
+
+              <textarea
+                value={textoFinal}
+                onChange={(e) => setTextoEditado(e.target.value)}
+                rows={16}
+                spellCheck={false}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg font-mono text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+
+              <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                <button
+                  onClick={handleCopiarLista}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg font-bold transition text-white ${
+                    copiado ? 'bg-green-600' : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {copiado ? (
+                    '✅ ¡Copiado!'
+                  ) : (
+                    <>
+                      <Copy size={18} /> Copiar lista
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() =>
+                    window.open(`https://wa.me/?text=${encodeURIComponent(textoFinal)}`)
+                  }
+                  className="flex-1 bg-green-500 text-white py-3 rounded-lg hover:bg-green-600 transition font-bold"
+                >
+                  Mandar por WhatsApp
                 </button>
               </div>
             </div>
